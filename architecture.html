@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TaxIQ Agent — Architecture</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #e0e8f4;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 36px 16px 48px;
+}
+.wrap {
+  width: 100%;
+  max-width: 960px;
+}
+svg { display: block; width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<svg viewBox="0 0 680 618" xmlns="http://www.w3.org/2000/svg"
+     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif">
+
+  <rect width="680" height="618" fill="#f0f4fb" rx="14"/>
+
+  <text x="340" y="26" text-anchor="middle" font-size="13.5" font-weight="500" fill="#1a2f4a">TaxIQ Agent — Architecture</text>
+
+  <!-- Row 1: User + Web App -->
+  <rect x="20" y="44" width="100" height="62" rx="9" fill="#F1EFE8" stroke="#888780" stroke-width="1.5"/>
+  <circle cx="70" cy="65" r="11" fill="#888780"/>
+  <rect x="58" y="77" width="24" height="13" rx="4" fill="#B4B2A9"/>
+  <text x="70" y="100" text-anchor="middle" font-size="10.5" font-weight="500" fill="#444441">Business owner</text>
+
+  <line x1="121" y1="75" x2="137" y2="75" stroke="#378ADD" stroke-width="2"/>
+  <polygon points="140,75 128,68 128,82" fill="#378ADD"/>
+
+  <rect x="140" y="44" width="520" height="62" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.5"/>
+  <text x="400" y="66" text-anchor="middle" font-size="13" font-weight="500" fill="#0C447C">TaxIQ web app</text>
+  <line x1="158" y1="72" x2="642" y2="72" stroke="#B5D4F4" stroke-width="1"/>
+  <text x="400" y="89" text-anchor="middle" font-size="10.5" fill="#185FA5">Enter financials · Run analysis · View results · Download PDF</text>
+
+  <!-- Arrow: Web App → Azure -->
+  <line x1="340" y1="107" x2="340" y2="128" stroke="#378ADD" stroke-width="2"/>
+  <polygon points="340,132 332,120 348,120" fill="#378ADD"/>
+  <rect x="277" y="111" width="126" height="13" rx="3" fill="#f0f4fb" opacity=".92"/>
+  <text x="340" y="121" text-anchor="middle" font-size="9.5" fill="#378ADD">analyze financials</text>
+
+  <!-- Row 2: Azure AI Foundry -->
+  <rect x="20" y="132" width="640" height="86" rx="9" fill="#0C447C" stroke="#042C53" stroke-width="1.5"/>
+  <text x="340" y="156" text-anchor="middle" font-size="14" font-weight="500" fill="#E6F1FB">Azure AI Foundry — Reasoning Agent (GPT-4o)</text>
+  <line x1="38" y1="164" x2="642" y2="164" stroke="rgba(181,212,244,.2)" stroke-width="1"/>
+  <text x="340" y="181" text-anchor="middle" font-size="10.5" fill="#B5D4F4">Categorize → Identify deductions → Calculate tax → Flag audit risks → Recommend</text>
+  <text x="340" y="198" text-anchor="middle" font-size="9.5" fill="#85B7EB">Tax years supported: 2024 · 2025 · 2026 (projected)</text>
+
+  <!-- Arrows: Azure → 3 tools -->
+  <line x1="123" y1="218" x2="123" y2="246" stroke="#3a85c8" stroke-width="1.5"/>
+  <polygon points="123,250 115,238 131,238" fill="#3a85c8"/>
+  <line x1="340" y1="218" x2="340" y2="246" stroke="#3a85c8" stroke-width="1.5"/>
+  <polygon points="340,250 332,238 348,238" fill="#3a85c8"/>
+  <line x1="557" y1="218" x2="557" y2="246" stroke="#3a85c8" stroke-width="1.5"/>
+  <polygon points="557,250 549,238 565,238" fill="#3a85c8"/>
+  <rect x="272" y="225" width="136" height="12" rx="3" fill="#f0f4fb" opacity=".9"/>
+  <text x="340" y="234.5" text-anchor="middle" font-size="9" fill="#3a85c8">parallel tool calls</text>
+
+  <!-- Row 3: Three tools -->
+  <rect x="20" y="250" width="206" height="106" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.5"/>
+  <text x="123" y="272" text-anchor="middle" font-size="12" font-weight="500" fill="#085041">Tax liability calculator</text>
+  <line x1="36" y1="279" x2="210" y2="279" stroke="#9FE1CB" stroke-width="1"/>
+  <text x="123" y="297" text-anchor="middle" font-size="10.5" fill="#0F6E56">Federal &amp; SE tax</text>
+  <text x="123" y="314" text-anchor="middle" font-size="10.5" fill="#0F6E56">IRS brackets 2024–2026</text>
+  <text x="123" y="331" text-anchor="middle" font-size="10.5" fill="#0F6E56">Effective &amp; marginal rates</text>
+  <text x="123" y="348" text-anchor="middle" font-size="9" fill="#1D9E75" font-style="italic">IRS-compliant computation</text>
+
+  <rect x="237" y="250" width="206" height="106" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.5"/>
+  <text x="340" y="272" text-anchor="middle" font-size="12" font-weight="500" fill="#085041">Deduction analyzer</text>
+  <line x1="253" y1="279" x2="427" y2="279" stroke="#9FE1CB" stroke-width="1"/>
+  <text x="340" y="297" text-anchor="middle" font-size="10.5" fill="#0F6E56">Business expenses</text>
+  <text x="340" y="314" text-anchor="middle" font-size="10.5" fill="#0F6E56">Home office &amp; vehicle</text>
+  <text x="340" y="331" text-anchor="middle" font-size="10.5" fill="#0F6E56">QBI 20% pass-through</text>
+  <text x="340" y="348" text-anchor="middle" font-size="9" fill="#1D9E75" font-style="italic">Maximizes eligible deductions</text>
+
+  <rect x="454" y="250" width="206" height="106" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.5"/>
+  <text x="557" y="272" text-anchor="middle" font-size="12" font-weight="500" fill="#085041">Audit risk scanner</text>
+  <line x1="470" y1="279" x2="644" y2="279" stroke="#9FE1CB" stroke-width="1"/>
+  <text x="557" y="297" text-anchor="middle" font-size="10.5" fill="#0F6E56">IRS audit risk scoring</text>
+  <text x="557" y="314" text-anchor="middle" font-size="10.5" fill="#0F6E56">Expense ratio analysis</text>
+  <text x="557" y="331" text-anchor="middle" font-size="10.5" fill="#0F6E56">HIGH / MEDIUM / LOW</text>
+  <text x="557" y="348" text-anchor="middle" font-size="9" fill="#1D9E75" font-style="italic">Flags risks before filing</text>
+
+  <!-- Bracket: tools → Results -->
+  <line x1="123" y1="356" x2="123" y2="390" stroke="#3a85c8" stroke-width="1.5"/>
+  <line x1="340" y1="356" x2="340" y2="390" stroke="#3a85c8" stroke-width="1.5"/>
+  <line x1="557" y1="356" x2="557" y2="390" stroke="#3a85c8" stroke-width="1.5"/>
+  <line x1="123" y1="390" x2="557" y2="390" stroke="#3a85c8" stroke-width="1.5"/>
+  <line x1="340" y1="390" x2="340" y2="412" stroke="#3a85c8" stroke-width="1.5"/>
+  <polygon points="340,416 332,404 348,404" fill="#3a85c8"/>
+  <rect x="264" y="394" width="152" height="12" rx="3" fill="#f0f4fb" opacity=".9"/>
+  <text x="340" y="403.5" text-anchor="middle" font-size="9" fill="#3a85c8">structured results</text>
+
+  <!-- Row 4: Results Dashboard -->
+  <rect x="20" y="416" width="640" height="76" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.5"/>
+  <text x="340" y="440" text-anchor="middle" font-size="13" font-weight="500" fill="#0C447C">Results dashboard</text>
+  <line x1="38" y1="447" x2="642" y2="447" stroke="#B5D4F4" stroke-width="1"/>
+  <text x="340" y="464" text-anchor="middle" font-size="10.5" fill="#185FA5">Tax summary · Deduction breakdown · Audit risk flags · Quarterly payment estimates</text>
+  <text x="340" y="481" text-anchor="middle" font-size="10" fill="#185FA5">Full agent reasoning chain visible — every conclusion cites IRS source</text>
+
+  <!-- Arrow: Results → PDF -->
+  <line x1="340" y1="493" x2="340" y2="512" stroke="#993C1D" stroke-width="2"/>
+  <polygon points="340,516 332,504 348,504" fill="#993C1D"/>
+  <rect x="272" y="496" width="136" height="12" rx="3" fill="#f0f4fb" opacity=".9"/>
+  <text x="340" y="505.5" text-anchor="middle" font-size="9.5" fill="#993C1D">generate report</text>
+
+  <!-- Row 5: PDF Report -->
+  <rect x="160" y="516" width="360" height="58" rx="9" fill="#FAECE7" stroke="#993C1D" stroke-width="1.5"/>
+  <text x="340" y="540" text-anchor="middle" font-size="13" font-weight="500" fill="#712B13">PDF tax readiness report</text>
+  <line x1="176" y1="547" x2="504" y2="547" stroke="#F5C4B3" stroke-width="1"/>
+  <text x="340" y="563" text-anchor="middle" font-size="10.5" fill="#993C1D">Professional layout · IRS citations · One-click download</text>
+
+  <!-- Legend -->
+  <rect x="20" y="592" width="640" height="20" rx="5" fill="rgba(255,255,255,.55)"/>
+  <line x1="32" y1="602" x2="56" y2="602" stroke="#378ADD" stroke-width="1.5"/>
+  <text x="62" y="605.5" font-size="9.5" fill="#5F5E5A">Data flow</text>
+  <rect x="120" y="595" width="13" height="13" rx="2" fill="#E6F1FB" stroke="#185FA5" stroke-width="1"/>
+  <text x="138" y="605.5" font-size="9.5" fill="#5F5E5A">Web / Results</text>
+  <rect x="228" y="595" width="13" height="13" rx="2" fill="#0C447C"/>
+  <text x="246" y="605.5" font-size="9.5" fill="#5F5E5A">Azure AI</text>
+  <rect x="310" y="595" width="13" height="13" rx="2" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+  <text x="328" y="605.5" font-size="9.5" fill="#5F5E5A">Analysis tools</text>
+  <rect x="432" y="595" width="13" height="13" rx="2" fill="#FAECE7" stroke="#993C1D" stroke-width="1"/>
+  <text x="450" y="605.5" font-size="9.5" fill="#5F5E5A">PDF output</text>
+</svg>
+</div>
+</body>
+</html>
