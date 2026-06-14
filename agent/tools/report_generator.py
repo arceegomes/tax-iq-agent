@@ -77,7 +77,8 @@ def _write_rich(pdf, raw_line, line_height=5, is_bullet=False):
         rest_raw  = bold_match.group(2).strip()
         label = _latin1(re.sub(r'\*+', '', label_raw))
         rest  = _latin1(re.sub(r'```[\w]*\n?[\s\S]*?```|`[^`]+`|\*+', '', rest_raw))
-        label_str = prefix + label + (': ' if rest else '')
+        _sep = '' if label.endswith(':') else ':'
+        label_str = prefix + label + (f'{_sep} ' if rest else '')
         label_w = pdf.get_string_width(label_str)
         avail   = pdf.w - pdf.l_margin - pdf.r_margin
 
@@ -141,22 +142,22 @@ class TaxReport(FPDF):
         r, g, b = colors.get(severity, (128, 128, 128))
         self.set_font("Helvetica", "B", 10)
         self.set_text_color(r, g, b)
-        self.cell(0, 6, "[%s] %s" % (severity, flag), new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, _latin1("[%s] %s" % (severity, flag)), new_x="LMARGIN", new_y="NEXT")
         self.set_text_color(0, 0, 0)
         self.set_font("Helvetica", "I", 9)
-        self.multi_cell(0, 5, detail)
+        self.multi_cell(0, 5, _latin1(detail))
         self.ln(1)
 
     def rec_item(self, number, title, detail):
         self.set_font("Helvetica", "B", 10)
-        self.cell(0, 6, "%d. %s" % (number, title), new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 6, "%d. %s" % (number, _latin1(title)), new_x="LMARGIN", new_y="NEXT")
         self.set_font("Helvetica", "", 9)
         self.set_text_color(60, 60, 60)
         indent = 8
         orig_lmargin = self.l_margin
         self.set_left_margin(orig_lmargin + indent)
         self.set_x(orig_lmargin + indent)
-        self.multi_cell(0, 5, detail)
+        self.multi_cell(0, 5, _latin1(detail))
         self.set_left_margin(orig_lmargin)
         self.set_x(orig_lmargin)  # reset X after indent restore
         self.set_text_color(0, 0, 0)
@@ -177,7 +178,7 @@ def generate_report(
 
     # Meta
     pdf.set_font("Helvetica", "", 10)
-    pdf.cell(0, 6, "Prepared for: %s" % taxpayer_name, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, "Prepared for: %s" % _latin1(taxpayer_name), new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 6, "Generated: %s" % datetime.now().strftime('%B %d, %Y'), new_x="LMARGIN", new_y="NEXT")
     if tax_year == 2026:
         pdf.cell(0, 6, "Tax Year: 2026 (Projected - for planning only)", new_x="LMARGIN", new_y="NEXT")
@@ -232,19 +233,44 @@ def generate_report(
     if agent_reasoning:
         pdf.add_page()
         pdf.section_title("Full Agent Analysis")
-        step_idx = agent_reasoning.find('[STEP')
+        lo = agent_reasoning.lower()
+        step_idx = lo.find('[step')
         text = agent_reasoning[step_idx:] if step_idx >= 0 else agent_reasoning
         # Strip fenced code blocks
         text = re.sub(r'```[\w]*\n?[\s\S]*?```', '', text)
-        # Strip markdown table rows (|col|col|) — deductions are already in the structured section
+        # Strip markdown table rows
         text = re.sub(r'^[ \t]*\|.*$', '', text, flags=re.MULTILINE)
-        # Split on [STEP N: LABEL], [STEP N CONTINUED: LABEL], and [CONCLUSION ...] headers
-        parts = re.split(r'(\[STEP\s*\d+[^:\]]*:[^\]]+\]|\[[A-Z][A-Z\s]+\])', text)
+        # Remap [TOOL N: ...] → correct [STEP N: LABEL]
+        _ts = {'1': '[STEP 2: DEDUCTIONS]', '2': '[STEP 3: CALCULATE LIABILITY]', '3': '[STEP 4: FLAG RISKS]'}
+        text = re.sub(r'\[TOOL\s*(\d+)[^\]]*\]', lambda m: _ts.get(m.group(1), ''), text, flags=re.IGNORECASE)
+        # Strip horizontal rules and "is complete" status step headers
+        text = re.sub(r'(?m)^[-*_]{3,}\s*$', '', text)
+        text = re.sub(r'\[STEP\s*\d+[^\]]*\bis complete\b[^\]]*\]', '', text, flags=re.IGNORECASE)
+        # Strip transitional tool-calling narration lines
+        _tr = re.compile(
+            r'(?m)^(?:\*{0,2}(?:Calling|Input for Tool|Fetching|Performing)\b[^\n]*'
+            r'|(?:Let me|I\'ll?)\s+(?:now\s+)?(?:call|fetch|use|calculate|proceed)[^\n]*'
+            r'|I will now (?:call|use|fetch|calculate|proceed)[^\n]*)$',
+            re.IGNORECASE
+        )
+        text = _tr.sub('', text)
+        # Dedup: keep only the last [STEP N: ...] occurrence for each step number
+        _sp = re.compile(r'\[STEP\s*(\d+)[^:\]]*:[^\]]+\]', re.IGNORECASE)
+        _cnt = {}
+        for _m in _sp.finditer(text):
+            _cnt[_m.group(1)] = _cnt.get(_m.group(1), 0) + 1
+        _seen = {}
+        def _dd(m):
+            n = m.group(1); _seen[n] = _seen.get(n, 0) + 1
+            return '' if _cnt.get(n, 1) > 1 and _seen[n] < _cnt[n] else m.group(0)
+        text = _sp.sub(_dd, text)
+        # Split on [STEP N: LABEL] headers
+        parts = re.split(r'(\[STEP\s*\d+[^:\]]*:[^\]]+\])', text, flags=re.IGNORECASE)
         for part in parts:
             part = part.strip()
             if not part:
                 continue
-            step_match = re.match(r'\[STEP\s*(\d+)[^:\]]*:\s*([^\]]+)\]', part)
+            step_match = re.match(r'\[STEP\s*(\d+)[^:\]]*:\s*([^\]]+)\]', part, re.IGNORECASE)
             label_match = re.match(r'\[([A-Z][A-Z\s]+)\]', part) if not step_match else None
             if step_match or label_match:
                 if pdf.get_y() + 30 > pdf.h - pdf.b_margin:

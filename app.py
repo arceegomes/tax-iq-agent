@@ -86,6 +86,9 @@ st.markdown(
     .step-header { background:#e6f2ff; border-left:4px solid #0066cc;
                    padding:8px 14px; border-radius:4px; margin:14px 0 6px 0;
                    font-weight:700; font-size:0.95rem; color:#003d80; }
+    .tool-result-header { background:#e8f5ee; border-left:4px solid #0f6e56;
+                          padding:8px 14px; border-radius:4px; margin:14px 0 6px 0;
+                          font-weight:700; font-size:0.95rem; color:#085041; }
     .analysis-body ol > li { margin-bottom: 10px; }
     .analysis-body ul > li { margin-bottom: 4px; }
     </style>
@@ -105,6 +108,7 @@ for key, default in {
     "pdf_path": None,
     "pdf_bytes": None,
     "reasoning_steps": [],
+    "saved_tool_results": {},
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -180,6 +184,7 @@ if analyze_btn:
     st.session_state.pdf_path = None
     st.session_state.pdf_bytes = None
     st.session_state.reasoning_steps = []
+    st.session_state.saved_tool_results = {}
 
     expenses = {
         "meals": meals, "software": software, "advertising": advertising,
@@ -215,13 +220,13 @@ Please perform your full step-by-step analysis: categorize the financials, ident
 
         if etype == "status":
             st.markdown(f'<div class="step-box">⚙️ {content}</div>', unsafe_allow_html=True)
-            st.session_state.reasoning_steps.append({"type": "status", "content": content})
+            st.session_state.reasoning_steps = st.session_state.reasoning_steps + [{"type": "status", "content": content}]
             step_count += 1
             progress.progress(min(step_count * 10, 80), text=content)
 
         elif etype == "tool_call":
             st.markdown(f'<div class="tool-box">🔧 {content}</div>', unsafe_allow_html=True)
-            st.session_state.reasoning_steps.append({"type": "tool_call", "content": content})
+            st.session_state.reasoning_steps = st.session_state.reasoning_steps + [{"type": "tool_call", "content": content}]
             tool_count += 1
 
         elif etype == "tool_result":
@@ -233,7 +238,11 @@ Please perform your full step-by-step analysis: categorize the financials, ident
                     st.session_state.deductions_result = parsed
                 elif "risks" in parsed:
                     st.session_state.risks_result = parsed
-                with st.expander(f"Tool result #{tool_count}", expanded=False):
+                st.session_state.reasoning_steps = st.session_state.reasoning_steps + [
+                    {"type": "tool_result", "count": tool_count}
+                ]
+                st.session_state.saved_tool_results[str(tool_count)] = parsed
+                with st.expander(f"Tool result #{tool_count}", expanded=False, key=f"live_tool_{tool_count}"):
                     st.json(parsed)
             except Exception:
                 pass
@@ -263,17 +272,24 @@ Please perform your full step-by-step analysis: categorize the financials, ident
         st.session_state.pdf_path = pdf_path
         with open(pdf_path, "rb") as f:
             st.session_state.pdf_bytes = f.read()
+    # Rerun so the results section renders cleanly from session state
+    # (ensures tool results, analysis, and PDF button all persist correctly)
+    st.rerun()
 
 # ── Results (persisted in session state) ─────────────────────────────────────
 if st.session_state.analysis_done:
-    # Replay reasoning steps when not in an active run (e.g. after download click)
-    if not analyze_btn and st.session_state.reasoning_steps:
+    if st.session_state.reasoning_steps:
         st.subheader("Agent Reasoning Steps")
         for step in st.session_state.reasoning_steps:
             if step["type"] == "status":
                 st.markdown(f'<div class="step-box">⚙️ {step["content"]}</div>', unsafe_allow_html=True)
             elif step["type"] == "tool_call":
                 st.markdown(f'<div class="tool-box">🔧 {step["content"]}</div>', unsafe_allow_html=True)
+            elif step["type"] == "tool_result":
+                data = st.session_state.saved_tool_results.get(str(step["count"]))
+                if data is not None:
+                    with st.expander(f"Tool result #{step['count']}", expanded=False, key=f"replay_tool_{step['count']}"):
+                        st.json(data)
 
     st.divider()
     st.subheader("Analysis Results")
@@ -369,50 +385,101 @@ if st.session_state.analysis_done:
     if st.session_state.final_text:
         st.divider()
         st.subheader("Full Agent Analysis")
-        # Use full reasoning log (all 5 steps); fall back to final_text if not available
         analysis_text = st.session_state.reasoning_log or st.session_state.final_text
-        # Trim any model preamble that appears before [STEP 1:
-        step_idx = analysis_text.find('[STEP')
+
+        # Case-insensitive trim: drop everything before the first [STEP ...] marker
+        lo = analysis_text.lower()
+        step_idx = lo.find('[step')
         if step_idx > 0:
             analysis_text = analysis_text[step_idx:]
-        # Strip fenced code blocks (JSON tool inputs etc.) — they clutter the narrative
+
+        # Pre-clean
         analysis_text = re.sub(r'```[\w]*\n?[\s\S]*?```', '', analysis_text)
-        # Strip inline JSON dicts e.g. {"meals": 3600, ...} that model writes in bullets
         analysis_text = re.sub(r'\{(?:\s*"[^"]+"\s*:\s*[^{}]+,?\s*)+\}', '(see structured data)', analysis_text)
-        # Strip LaTeX math \( ... \) and \[ ... \]
         analysis_text = re.sub(r'\\\([\s\S]*?\\\)', '', analysis_text)
         analysis_text = re.sub(r'\\\[[\s\S]*?\\\]', '', analysis_text)
-        # Break inline " - Item:" separators onto their own lines (agent sometimes writes items
-        # on a single line separated by " - " instead of using newlines)
+        # Remap [TOOL N: ...] → correct [STEP N: LABEL] so results land in the right section
+        _TOOL_STEP = {'1': '[STEP 2: DEDUCTIONS]', '2': '[STEP 3: CALCULATE LIABILITY]', '3': '[STEP 4: FLAG RISKS]'}
+        analysis_text = re.sub(
+            r'\[TOOL\s*(\d+)[^\]]*\]',
+            lambda m: _TOOL_STEP.get(m.group(1), ''),
+            analysis_text, flags=re.IGNORECASE
+        )
+        # Strip markdown horizontal rules and "is complete" status step headers
+        analysis_text = re.sub(r'(?m)^[-*_]{3,}\s*$', '', analysis_text)
+        analysis_text = re.sub(r'\[STEP\s*\d+[^\]]*\bis complete\b[^\]]*\]', '', analysis_text, flags=re.IGNORECASE)
+        # Strip transitional tool-calling narration lines (allow leading whitespace/asterisks)
+        _TRANSITION = re.compile(
+            r'(?m)^[ \t]*(?:\*{0,2}(?:Calling|Input for Tool|Fetching|Performing)\b[^\n]*'
+            r'|(?:Let me|I\'ll?)\s+(?:now\s+)?(?:call|fetch|use|calculate|proceed)[^\n]*'
+            r'|I will now (?:call|use|fetch|calculate|proceed)[^\n]*)$',
+            re.IGNORECASE
+        )
+        analysis_text = _TRANSITION.sub('', analysis_text)
         analysis_text = re.sub(r'(?<!\n)(?<![0-9]) - (?=[A-Z][^-]{2,}:)', '\n- ', analysis_text)
-        # Strip bare ### lines (no text after them)
         analysis_text = re.sub(r'^#{1,6}\s*$', '', analysis_text, flags=re.MULTILINE)
-        # Demote markdown headings (##) to bold so they don't render as giant H2/H3
-        normalized = re.sub(r'^#{1,6}\s+(.+)$', r'**\1**', analysis_text, flags=re.MULTILINE)
-        # Style [STEP N: LABEL] and [STEP N CONTINUED: LABEL] as blue step-header divs
-        normalized = re.sub(
-            r'\[STEP\s*(\d+)[^:\]]*:\s*([^\]]+)\]',
-            lambda m: f'<div class="step-header">Step {m.group(1)}: {m.group(2).strip()}</div>',
-            normalized,
-        )
-        # Style [CONCLUSION ...] and other [ALL CAPS LABEL] headers the same way
-        normalized = re.sub(
-            r'\[([A-Z][A-Z\s]+)\]',
-            lambda m: f'<div class="step-header">{m.group(1).title()}</div>',
-            normalized,
-        )
-        # Add blank line before bold sub-heading lines (**Label:**) for visual breathing room
-        normalized = re.sub(r'(?m)^(\*\*[^*\n]+\*\*\s*)$', r'\n\1', normalized)
-        # Convert markdown bold/italic to HTML (must run before stripping bare **)
-        normalized = re.sub(r'\*\*\*(.+?)\*\*\*', r'<strong><em>\1</em></strong>', normalized, flags=re.DOTALL)
-        normalized = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', normalized, flags=re.DOTALL)
-        normalized = re.sub(r'\*(.+?)\*', r'<em>\1</em>', normalized, flags=re.DOTALL)
-        # Strip any leftover bare ** markers (e.g. orphan ** on its own line)
-        normalized = re.sub(r'^\*+\s*$', '', normalized, flags=re.MULTILINE)
-        normalized = re.sub(r'\*\*', '', normalized)
-        # Escape $ before digits — Streamlit treats $...$ as LaTeX math delimiters
-        normalized = re.sub(r'\$(\d)', r'&#36;\1', normalized)
-        st.markdown(f'<div class="analysis-body">{normalized}</div>', unsafe_allow_html=True)
+        # Strip disclaimer lines the agent appends (any line containing "Disclaimer")
+        analysis_text = re.sub(r'(?m)^[^\n]*\bDisclaimer\b[^\n]*$', '', analysis_text, flags=re.IGNORECASE)
+        analysis_text = re.sub(r'(?m)^This analysis is for informational purposes[^\n]*$', '', analysis_text, flags=re.IGNORECASE)
+        analysis_text = re.sub(r'(?m)^Please consult a (?:licensed |qualified )?(?:CPA|tax professional)[^\n]*$', '', analysis_text, flags=re.IGNORECASE)
+        # Strip standalone "Note:" sub-bullets (value context already visible in the deductions table)
+        analysis_text = re.sub(r'(?m)^[ \t]*[-•*]\s*\*{0,2}Note:\*{0,2}\s*[^\n]*$', '', analysis_text, flags=re.IGNORECASE)
+
+        # Dedup: for each step number, keep only the LAST [STEP N: ...] occurrence
+        _STEP_PAT = re.compile(r'\[STEP\s*(\d+)[^:\]]*:[^\]]+\]', re.IGNORECASE)
+        _counts = {}
+        for _m in _STEP_PAT.finditer(analysis_text):
+            _counts[_m.group(1)] = _counts.get(_m.group(1), 0) + 1
+        _seen = {}
+        def _dedup_sub(m):
+            n = m.group(1)
+            _seen[n] = _seen.get(n, 0) + 1
+            return '' if _counts.get(n, 1) > 1 and _seen[n] < _counts[n] else m.group(0)
+        analysis_text = _STEP_PAT.sub(_dedup_sub, analysis_text)
+
+        # Convert to HTML (bold/italic, dollar escaping)
+        def _to_html(text):
+            # Strip standalone ### lines the agent uses as section separators
+            text = re.sub(r'^#{1,6}\s*$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'^#{1,6}\s+(.+)$', r'**\1**', text, flags=re.MULTILINE)
+            text = re.sub(r'(?m)^(\*\*[^*\n]+\*\*\s*)$', r'\n\1', text)
+            text = re.sub(r'\*\*\*(.+?)\*\*\*', r'<strong><em>\1</em></strong>', text, flags=re.DOTALL)
+            text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text, flags=re.DOTALL)
+            text = re.sub(r'\*([^*\n]+?)\*', r'<em>\1</em>', text)
+            text = re.sub(r'^\*+\s*$', '', text, flags=re.MULTILINE)
+            text = re.sub(r'\*\*', '', text)
+            # Join bold label on its own line with the value that follows on the next line
+            # e.g.  **Meals & Entertainment:**\n   $3,240  →  <strong>…</strong>: $3,240
+            text = re.sub(r'(</strong>:?)\n[ \t]+', r'\1 ', text)
+            # Break numbered-list bold titles onto their own line when body text follows inline
+            text = re.sub(r'^(\d+\.\s+<strong>[^<]+</strong>:?)\s+(?=\S)', r'\1<br>', text, flags=re.MULTILINE)
+            # Break "Overall Risk Level: HIGH Given these factors..." onto its own line
+            text = re.sub(r'(Overall Risk Level:\s*(?:HIGH|MEDIUM|LOW))\s+(?=[A-Z])', r'\1<br>', text, flags=re.IGNORECASE)
+            # Color severity badges
+            text = re.sub(r'\(Severity:\s*High\)', '<span style="color:#c0392b;font-weight:600">(Severity: High)</span>', text, flags=re.IGNORECASE)
+            text = re.sub(r'\(Severity:\s*Medium\)', '<span style="color:#e67e22;font-weight:600">(Severity: Medium)</span>', text, flags=re.IGNORECASE)
+            text = re.sub(r'\(Severity:\s*Low\)', '<span style="color:#27ae60;font-weight:600">(Severity: Low)</span>', text, flags=re.IGNORECASE)
+            text = re.sub(r'\$(\d)', r'&#36;\1', text)
+            return text
+
+        # Collect all step headers, sort by step number, render each as a collapsed expander
+        _all_hdrs = list(_STEP_PAT.finditer(analysis_text))
+        if not _all_hdrs:
+            st.markdown(f'<div class="analysis-body">{_to_html(analysis_text)}</div>', unsafe_allow_html=True)
+        else:
+            _preamble = analysis_text[:_all_hdrs[0].start()].strip()
+            if _preamble:
+                st.markdown(f'<div class="analysis-body">{_to_html(_preamble)}</div>', unsafe_allow_html=True)
+            _sections = []
+            for _i, _m in enumerate(_all_hdrs):
+                _num = int(re.search(r'\d+', _m.group(0)).group())
+                _lbl = re.sub(r'^\[STEP\s*\d+[^:\]]*:\s*', '', _m.group(0), flags=re.IGNORECASE).rstrip(']').strip()
+                _b_end = _all_hdrs[_i + 1].start() if _i + 1 < len(_all_hdrs) else len(analysis_text)
+                _sections.append({'num': _num, 'label': f'Step {_num}: {_lbl}', 'body': analysis_text[_m.end():_b_end].strip()})
+            _sections.sort(key=lambda s: s['num'])
+            for _s in _sections:
+                with st.expander(_s['label'], expanded=False, key=f"fa_sec_{_s['num']}"):
+                    st.markdown(f'<div class="analysis-body">{_to_html(_s["body"])}</div>', unsafe_allow_html=True)
 
     # PDF download — bytes stored in session state so reruns (from this click) don't clear results
     if st.session_state.pdf_bytes:

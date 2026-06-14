@@ -51,6 +51,7 @@ def run_tax_agent(user_message: str, tax_year: int = 2025) -> Generator[dict, No
             name="TaxIQ",
             instructions=SYSTEM_PROMPT,
             tools=TOOL_DEFINITIONS,
+            temperature=0,
         )
     except Exception as e:
         yield {"type": "error", "content": f"Failed to create agent: {e}"}

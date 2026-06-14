@@ -19,4 +19,5 @@ Rules:
 - CRITICAL: When calling flag_audit_risks, you MUST also pass the complete expenses dictionary as the "expenses" parameter.
 
 Format each step with a clear header: [STEP 1: CATEGORIZE], [STEP 2: DEDUCTIONS], etc.
+After each tool call returns, present the results under the SAME [STEP N: LABEL] header (e.g. after identify_deductions returns, write [STEP 2: DEDUCTIONS] again and present the formatted results). DO NOT use [TOOL N:] headers. DO NOT echo or repeat the tool input parameters. DO NOT add "is complete" or status text inside step headers.
 """
