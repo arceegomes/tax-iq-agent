@@ -106,7 +106,7 @@ agent/
 | **Reasoning & Multi-step (20%)** | Explicit 5-step chain with labelled steps, tool calls visible in UI |
 | **Reliability & Safety (20%)** | Every conclusion cites an IRC section; disclaimer on all outputs |
 | **Creativity & Originality (15%)** | Tax domain + visible reasoning chain + multi-year planning is novel |
-| **User Experience (15%)** | Collapsible sidebar, live step tracking, structured results, PDF download |
+| **User Experience (15%)** | Collapsible sidebar with collapsible input sections, collapsible 5-step analysis sections, live tool tracking, structured results, PDF download |
 | **Hack for Good** | Serves freelancers/SMBs who can't afford a CPA |
 
 ---
