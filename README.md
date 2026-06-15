@@ -2,6 +2,8 @@
 
 > An AI-powered tax reasoning agent for small businesses and self-employed individuals — built on Azure AI Foundry for the **Microsoft Agents League @ AI Skills Fest**.
 
+**Demo Video:** https://youtu.be/qkA2_99iqhQ
+
 **Track:** Reasoning Agents (Azure AI Foundry)
 **Tax Years Supported:** 2024 · 2025 · 2026 (projected)
 **Target users:** Freelancers, sole proprietors, LLC owners, S-Corp owners
